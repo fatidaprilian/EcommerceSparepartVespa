@@ -21,7 +21,7 @@ services:
     networks:
       - sail
     environment:
-      - SERVER_NAME=
+      - SERVER_NAME=203.161.25.195
 
   # Service MySQL
   mysql:
