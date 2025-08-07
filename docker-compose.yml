@@ -21,28 +21,29 @@ services:
     networks:
       - sail
 
-  # --- SERVICE LAINNYA TIDAK BERUBAH ---
-mysql:
-  image: 'mysql/mysql-server:8.0'
-  ports:
-    - '${FORWARD_DB_PORT:-3306}:3306'
-  environment:
-    MYSQL_ROOT_PASSWORD: 'password'
-    MYSQL_ROOT_HOST: '%'
-    MYSQL_DATABASE: 'vespa_db'  # Sesuaikan dengan .env
-    MYSQL_USER: 'sail'
-    MYSQL_PASSWORD: 'password'
-    MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-  volumes:
-    - 'sail-mysql:/var/lib/mysql'
-  networks:
-    - sail
-  healthcheck:
-    test: ["CMD", "mysqladmin", "ping", "-ppassword"]
-    retries: 3
-    timeout: 5s
-  command: --default-authentication-plugin=mysql_native_password --skip-host-cache --skip-name-resolve
+  # Service MySQL
+  mysql:
+    image: 'mysql/mysql-server:8.0'
+    ports:
+      - '${FORWARD_DB_PORT:-3306}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: 'password'
+      MYSQL_ROOT_HOST: '%'
+      MYSQL_DATABASE: 'vespa_db'
+      MYSQL_USER: 'sail'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+    volumes:
+      - 'sail-mysql:/var/lib/mysql'
+    networks:
+      - sail
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-ppassword"]
+      retries: 3
+      timeout: 5s
+    command: --default-authentication-plugin=mysql_native_password --skip-host-cache --skip-name-resolve
 
+  # Service Redis
   redis:
     image: 'redis:alpine'
     ports:
@@ -56,6 +57,7 @@ mysql:
       retries: 3
       timeout: 5s
 
+  # Service Meilisearch
   meilisearch:
     image: 'getmeili/meilisearch:latest'
     ports:
@@ -71,6 +73,7 @@ mysql:
       retries: 3
       timeout: 5s
 
+  # Service Mailpit
   mailpit:
     image: 'axllent/mailpit:latest'
     ports:
@@ -79,6 +82,7 @@ mysql:
     networks:
       - sail
 
+  # Service Selenium
   selenium:
     image: selenium/standalone-chromium
     extra_hosts:
