@@ -20,6 +20,8 @@ services:
       - selenium
     networks:
       - sail
+    environment:
+      - SERVER_NAME=
 
   # Service MySQL
   mysql:
