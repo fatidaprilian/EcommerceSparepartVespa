@@ -1,44 +1,42 @@
-# --- Tahap 1: Backend Dependencies ---
-FROM composer:2.7 as vendor
+# --- Tahap 1: Build Stage (PHP + Node) ---
+# Menggabungkan instalasi backend dan frontend dalam satu tahap
+# agar semua file bisa diakses saat build.
+FROM composer:2.7 as build
 WORKDIR /app
 
-# [FIX v2] Menambahkan build-base & virtual package untuk instalasi yang lebih stabil
-# dan menghapusnya setelah selesai untuk menjaga ukuran image tetap kecil.
-RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev libzip-dev \
+# Install dependensi sistem, ekstensi PHP, DAN Node.js + npm
+RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS icu-dev libzip-dev nodejs npm \
     && docker-php-ext-install zip intl \
     && apk del .build-deps
 
-COPY database/ database/
-COPY composer.json composer.json
-COPY composer.lock composer.lock
-RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist
-
-
-# --- Tahap 2: Frontend Dependencies ---
-FROM node:20-alpine as frontend
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+# Salin semua file project
 COPY . .
-RUN npm run build
+
+# Install dependensi Composer
+RUN composer install --no-interaction --no-dev --optimize-autoloader
+
+# Install dependensi NPM dan build aset frontend
+RUN npm ci && npm run build
 
 
-# --- Tahap 3: Production Image ---
+# --- Tahap 2: Production Image ---
+# Memulai dari image FrankenPHP yang ramping untuk hasil akhir.
 FROM dunglas/frankenphp:php8.3-alpine as production
 WORKDIR /app
 
-COPY --chown=frankenphp:frankenphp . .
+# Salin semua file yang sudah ter-build, termasuk folder vendor dan aset
+COPY --chown=frankenphp:frankenphp --from=build /app .
 
-COPY --from=vendor /app/vendor/ ./vendor/
-COPY --from=frontend /app/public/build ./public/build
-
+# Berikan izin yang benar dan aman untuk Laravel
 RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
 RUN chmod -R 775 /app/storage /app/bootstrap/cache
 
-RUN composer install --no-interaction --no-dev --optimize-autoloader
+# Jalankan optimasi Laravel untuk production
+# (composer install tidak perlu lagi karena vendor sudah disalin)
 RUN php artisan config:cache
 RUN php artisan route:cache
 RUN php artisan view:cache
 RUN php artisan event:cache
 
+# Expose port yang digunakan oleh Caddy (web server FrankenPHP)
 EXPOSE 80 443 443/udp
