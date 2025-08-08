@@ -50,14 +50,19 @@ RUN php artisan config:cache || true
 RUN php artisan route:cache || true  
 RUN php artisan view:cache || true
 
+# Test Laravel bisa jalan
+RUN php artisan --version
+
 EXPOSE 8080
 
-# Environment variables - biarkan FrankenPHP auto-detect Laravel
+# Environment variables
 ENV SERVER_NAME=":8080"
+ENV APP_ENV=production
+ENV APP_DEBUG=false
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+# NO HEALTH CHECK untuk sementara - biar tidak di-kill
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+#     CMD curl -f http://localhost:8080/ || exit 1
 
-# JANGAN gunakan custom Caddyfile - biarkan FrankenPHP auto-detect Laravel
-CMD ["frankenphp", "run"]
+# Start dengan debugging
+CMD ["sh", "-c", "echo 'Starting FrankenPHP...' && frankenphp run --config /dev/stdin << 'EOF'\n:8080 {\n    root * /app/public\n    php_server\n}\nEOF"]
