@@ -1,4 +1,3 @@
-# Menggunakan image yang sudah siap dengan PHP extensions
 FROM dunglas/frankenphp:php8.3-alpine
 
 WORKDIR /app
@@ -32,15 +31,15 @@ RUN apk add --no-cache \
 # Install Composer
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
-# Copy composer files dan install dependencies
+# Copy composer files dan install dependencies TANPA scripts
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --no-dev --optimize-autoloader --ignore-platform-reqs
+RUN composer install --no-interaction --no-dev --no-scripts --ignore-platform-reqs
 
-# Copy seluruh aplikasi
+# Copy seluruh aplikasi SETELAH composer install
 COPY . .
 
-# Install ulang dengan platform check (sekarang extensions sudah ada)
-RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
+# Sekarang jalankan composer install dengan scripts (artisan sudah ada)
+RUN composer install --no-interaction --no-dev --optimize-autoloader
 
 # Set proper permissions untuk Laravel
 RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache \
