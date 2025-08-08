@@ -1,44 +1,52 @@
-# --- Tahap 1: Dapatkan Composer ---
-FROM composer:lts as composer
+# --- Tahap 1: Backend Dependencies ---
+# Menggunakan image composer resmi untuk menginstall dependensi PHP.
+# Ini memanfaatkan cache Docker secara efisien.
+FROM composer:2.7 as vendor
+WORKDIR /app
+COPY database/ database/
+COPY composer.json composer.json
+COPY composer.lock composer.lock
+RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist
 
-# --- Tahap 2: Bangun Image Aplikasi Utama ---
-FROM dunglas/frankenphp:php8.4-alpine
 
-# Atur direktori kerja
+# --- Tahap 2: Frontend Dependencies ---
+# Menggunakan image Node.js untuk membangun aset frontend.
+# Tahap ini akan dibuang dan tidak akan ada di image final.
+FROM node:20-alpine as frontend
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+
+# --- Tahap 3: Production Image ---
+# Memulai dari image FrankenPHP yang ramping.
+FROM dunglas/frankenphp:php8.3-alpine as production
 WORKDIR /app
 
-# Install dependensi sistem, ekstensi PHP, DAN Node.js + npm
-RUN apk add --no-cache \
-    libzip-dev \
-    icu-dev \
-    nodejs \
-    npm \
-    && docker-php-ext-install \
-    zip \
-    intl \
-    pdo_mysql
+# [PENTING] User default di image ini adalah 'frankenphp'.
+# Kita akan menyalin file dengan user ini untuk izin yang benar.
+COPY --chown=frankenphp:frankenphp . .
 
-# Salin binary Composer
-COPY --from=composer /usr/bin/composer /usr/bin/composer
+# Salin artifak dari tahap-tahap sebelumnya
+COPY --from=vendor /app/vendor/ ./vendor/
+COPY --from=frontend /app/public/build ./public/build
 
-# Salin file composer
-COPY composer.json composer.lock ./
+# Berikan izin yang benar dan aman untuk Laravel
+RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
+RUN chmod -R 775 /app/storage /app/bootstrap/cache
 
-# Install dependensi PHP tanpa skrip
-RUN composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+# Jalankan optimasi Laravel untuk production
+# Ini membuat aplikasi Anda lebih cepat.
+RUN composer install --no-interaction --no-dev --optimize-autoloader
+RUN php artisan config:cache
+RUN php artisan route:cache
+RUN php artisan view:cache
+RUN php artisan event:cache
 
-# Salin sisa kode aplikasi
-COPY . .
-
-# Jalankan kembali composer install untuk menjalankan skrip
-RUN composer install --no-dev --no-interaction --optimize-autoloader
-
-# Berikan izin tulis universal ke direktori storage dan cache
-RUN chmod -R 777 /app/storage /app/bootstrap/cache
-
-# Expose port
+# Expose port yang digunakan oleh Caddy (web server FrankenPHP)
 EXPOSE 80 443 443/udp
 
-# [PENTING] Kita tidak lagi mendefinisikan Caddyfile, CMD, atau ENTRYPOINT.
-# Biarkan entrypoint default dari image dunglas/frankenphp mengambil alih.
-# Ia akan secara otomatis mendeteksi Laravel dan menjalankannya.
+# Biarkan entrypoint default dari FrankenPHP yang akan menjalankan Laravel.
+# Tidak perlu CMD atau ENTRYPOINT manual.
