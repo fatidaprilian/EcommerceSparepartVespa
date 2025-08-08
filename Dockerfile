@@ -1,105 +1,44 @@
-FROM dunglas/frankenphp:php8.3-alpine
+# --- Tahap 1: Dapatkan Composer ---
+FROM composer:lts as composer
 
+# --- Tahap 2: Bangun Image Aplikasi Utama ---
+FROM dunglas/frankenphp:php8.4-alpine
+
+# Atur direktori kerja
 WORKDIR /app
 
-# Install system dependencies
+# Install dependensi sistem, ekstensi PHP, DAN Node.js + npm
 RUN apk add --no-cache \
-    icu-dev \
-    libxml2-dev \
     libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    oniguruma-dev \
-    curl-dev \
-    curl \
-    autoconf \
-    g++ \
-    make
-
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    icu-dev \
+    nodejs \
+    npm \
     && docker-php-ext-install \
-    pdo \
-    pdo_mysql \
-    mbstring \
-    xml \
-    curl \
     zip \
-    bcmath \
-    gd \
     intl \
-    opcache
+    pdo_mysql
 
-# Install Composer
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+# Salin binary Composer
+COPY --from=composer /usr/bin/composer /usr/bin/composer
 
-# Copy and install dependencies
+# Salin file composer
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --no-dev --no-scripts --ignore-platform-reqs
 
-# Copy application
+# Install dependensi PHP tanpa skrip
+RUN composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
+
+# Salin sisa kode aplikasi
 COPY . .
-RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Set permissions
+# Jalankan kembali composer install untuk menjalankan skrip
+RUN composer install --no-dev --no-interaction --optimize-autoloader
+
+# Berikan izin tulis universal ke direktori storage dan cache
 RUN chmod -R 777 /app/storage /app/bootstrap/cache
 
-# Create simple health check that doesn't depend on database
-RUN echo '<?php http_response_code(200); echo "OK"; ?>' > /app/public/health.php
+# Expose port
+EXPOSE 80 443 443/udp
 
-# Laravel setup with error handling (skip if database not ready)
-RUN php artisan key:generate --force || echo "Key generation skipped"
-RUN php artisan config:cache || echo "Config cache skipped"
-RUN php artisan route:cache || echo "Route cache skipped"
-RUN php artisan view:cache || echo "View cache skipped"
-
-# Create startup script to handle database migrations
-RUN cat > /app/startup.sh << 'EOF'
-#!/bin/sh
-
-echo "Starting Laravel application..."
-
-# Wait for database to be ready (optional)
-echo "Checking database connection..."
-php artisan migrate --force || echo "Migration failed, continuing anyway..."
-
-# Clear and cache config
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-echo "Starting FrankenPHP..."
-exec frankenphp run --config /etc/caddy/Caddyfile
-EOF
-
-RUN chmod +x /app/startup.sh
-
-# Create Caddyfile with better error handling
-RUN cat > /etc/caddy/Caddyfile << 'EOF'
-:8080 {
-	root * /app/public
-	php_server
-	
-	# Health check endpoint
-	handle /health {
-		respond "OK" 200
-	}
-	
-	# Handle Laravel index
-	handle {
-		try_files {path} {path}/ /index.php?{query}
-	}
-	
-	# Logging
-	log {
-		output stdout
-		format console
-	}
-}
-EOF
-
-EXPOSE 8080
-
-# Use startup script instead of direct frankenphp
-CMD ["/app/startup.sh"]
+# [PENTING] Kita tidak lagi mendefinisikan Caddyfile, CMD, atau ENTRYPOINT.
+# Biarkan entrypoint default dari image dunglas/frankenphp mengambil alih.
+# Ia akan secara otomatis mendeteksi Laravel dan menjalankannya.
