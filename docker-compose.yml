@@ -21,7 +21,7 @@ services:
     networks:
       - sail
     environment:
-      - SERVER_NAME=203.161.25.195
+      - SERVER_NAME=localhost 127.0.0.1 host.docker.internal
 
   # Service MySQL
   mysql:
@@ -59,9 +59,9 @@ services:
       retries: 3
       timeout: 5s
 
-  # Service Meilisearch
+  # Service Meilisearch - Fixed version compatibility
   meilisearch:
-    image: 'getmeili/meilisearch:latest'
+    image: 'getmeili/meilisearch:v1.15.2'
     ports:
       - '${FORWARD_MEILISEARCH_PORT:-7700}:7700'
     environment:
