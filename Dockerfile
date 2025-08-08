@@ -10,7 +10,8 @@ RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist --igno
 FROM node:20-alpine as frontend
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+# Install ALL dependencies (termasuk dev) untuk build
+RUN npm ci
 COPY . .
 RUN npm run build
 
