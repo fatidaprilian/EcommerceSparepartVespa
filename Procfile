@@ -1,0 +1,1 @@
+web: frankenphp run --listen :$PORT
