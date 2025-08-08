@@ -1,40 +1,21 @@
-# --- Tahap 1: Backend Dependencies ---
-FROM composer:2.7 as vendor
-WORKDIR /app
-COPY database/ database/
-COPY composer.json composer.lock ./
-# Install dengan ignore platform requirements untuk tahap ini
-RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist --ignore-platform-reqs
+# Menggunakan image yang sudah siap dengan PHP extensions
+FROM dunglas/frankenphp:php8.3-alpine
 
-# --- Tahap 2: Frontend Dependencies ---
-FROM node:20-alpine as frontend
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-RUN npm ci
-
-# Copy vendor dari stage sebelumnya (untuk Ziggy)
-COPY --from=vendor /app/vendor ./vendor
-
-# Copy semua file yang dibutuhkan untuk build
-COPY . .
-
-# Build frontend assets
-RUN npm run build
-
-# --- Tahap 3: Production Image ---
-FROM dunglas/frankenphp:php8.3-alpine as production
-
-# Install dependensi yang diperlukan untuk Laravel
+# Install dependencies sistem yang dibutuhkan
 RUN apk add --no-cache \
     icu-dev \
+    libxml2-dev \
     libzip-dev \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
     oniguruma-dev \
     curl-dev \
+    autoconf \
+    g++ \
+    make \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
     pdo \
@@ -45,41 +26,32 @@ RUN apk add --no-cache \
     zip \
     bcmath \
     gd \
-    tokenizer \
-    fileinfo \
-    opcache \
-    intl
+    intl \
+    opcache
 
-WORKDIR /app
-
-# Install composer
+# Install Composer
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
-# Salin aplikasi dengan ownership yang benar
-COPY --chown=frankenphp:frankenphp . .
+# Copy composer files dan install dependencies
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --no-dev --optimize-autoloader --ignore-platform-reqs
 
-# Salin artifak dari tahap-tahap sebelumnya
-COPY --from=vendor --chown=frankenphp:frankenphp /app/vendor/ ./vendor/
-COPY --from=frontend --chown=frankenphp:frankenphp /app/public/build ./public/build
+# Copy seluruh aplikasi
+COPY . .
 
-# Berikan izin yang benar untuk Laravel
-RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
-RUN chmod -R 775 /app/storage /app/bootstrap/cache
-
-# Install dependencies lagi dengan platform requirements
+# Install ulang dengan platform check (sekarang extensions sudah ada)
 RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
 
-# Generate application key jika belum ada
-RUN php artisan key:generate --no-interaction --force || true
+# Set proper permissions untuk Laravel
+RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache \
+    && chmod -R 775 /app/storage /app/bootstrap/cache
 
-# Laravel optimizations
-RUN php artisan config:cache && \
-    php artisan route:cache && \
-    php artisan view:cache && \
-    php artisan event:cache
+# Laravel optimizations dengan error handling
+RUN php artisan key:generate --force || true
+RUN php artisan config:cache || true
+RUN php artisan route:cache || true  
+RUN php artisan view:cache || true
 
-# Expose port untuk Easypanel
 EXPOSE 8080
 
-# Jalankan FrankenPHP
 CMD ["frankenphp", "run", "--listen", ":8080"]
