@@ -1,0 +1,28 @@
+# Development Dockerfile untuk Laravel + FrankenPHP + Vite
+FROM dunglas/frankenphp:php8.3-alpine
+
+WORKDIR /app
+
+# Install Node.js dan npm untuk development
+RUN apk add --no-cache nodejs npm
+
+# Copy composer files dan install dependencies
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --prefer-dist
+
+# Copy package files dan install node dependencies
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy seluruh aplikasi
+COPY --chown=frankenphp:frankenphp . .
+
+# Set permissions untuk Laravel
+RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
+RUN chmod -R 775 /app/storage /app/bootstrap/cache
+
+# Expose ports
+EXPOSE 80 443 443/udp 5173
+
+# Script untuk menjalankan both Laravel dan Vite
+CMD ["sh", "-c", "php artisan serve --host=0.0.0.0 --port=80 & npm run dev"]
