@@ -9,10 +9,18 @@ RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist --igno
 # --- Tahap 2: Frontend Dependencies ---
 FROM node:20-alpine as frontend
 WORKDIR /app
+
+# Copy package files
 COPY package*.json ./
-# Install ALL dependencies (termasuk dev) untuk build
 RUN npm ci
+
+# Copy vendor dari stage sebelumnya (untuk Ziggy)
+COPY --from=vendor /app/vendor ./vendor
+
+# Copy semua file yang dibutuhkan untuk build
 COPY . .
+
+# Build frontend assets
 RUN npm run build
 
 # --- Tahap 3: Production Image ---
@@ -44,6 +52,9 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Install composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
 # Salin aplikasi dengan ownership yang benar
 COPY --chown=frankenphp:frankenphp . .
 
@@ -54,9 +65,6 @@ COPY --from=frontend --chown=frankenphp:frankenphp /app/public/build ./public/bu
 # Berikan izin yang benar untuk Laravel
 RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
 RUN chmod -R 775 /app/storage /app/bootstrap/cache
-
-# Install composer untuk optimasi
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
 # Install dependencies lagi dengan platform requirements
 RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
