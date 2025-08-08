@@ -50,23 +50,21 @@ RUN php artisan config:cache || true
 RUN php artisan route:cache || true  
 RUN php artisan view:cache || true
 
-# Create Caddyfile untuk konfigurasi eksplisit
+# Create Caddyfile untuk FrankenPHP (BUKAN PHP-FPM!)
 RUN echo ':8080 {' > /etc/caddy/Caddyfile && \
     echo '    root * /app/public' >> /etc/caddy/Caddyfile && \
-    echo '    php_fastcgi unix//var/run/php-fpm.sock' >> /etc/caddy/Caddyfile && \
-    echo '    file_server' >> /etc/caddy/Caddyfile && \
+    echo '    encode gzip' >> /etc/caddy/Caddyfile && \
+    echo '    php_server' >> /etc/caddy/Caddyfile && \
     echo '}' >> /etc/caddy/Caddyfile
 
 EXPOSE 8080
 
 # Environment variables untuk FrankenPHP
 ENV SERVER_NAME=":8080"
-ENV CADDY_GLOBAL_OPTIONS=""
-ENV FRANKENPHP_CONFIG="worker ./public/index.php"
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
-# Start dengan verbose logging
+# Start dengan Caddyfile yang benar
 CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
