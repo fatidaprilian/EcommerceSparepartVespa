@@ -53,16 +53,20 @@ RUN php artisan view:cache || true
 # Test Laravel bisa jalan
 RUN php artisan --version
 
+# Create simple Caddyfile
+RUN echo ':8080 {' > /etc/caddy/Caddyfile && \
+    echo '    root * /app/public' >> /etc/caddy/Caddyfile && \
+    echo '    php_server' >> /etc/caddy/Caddyfile && \
+    echo '}' >> /etc/caddy/Caddyfile
+
 EXPOSE 8080
 
 # Environment variables
 ENV SERVER_NAME=":8080"
-ENV APP_ENV=production
-ENV APP_DEBUG=false
 
-# NO HEALTH CHECK untuk sementara - biar tidak di-kill
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-#     CMD curl -f http://localhost:8080/ || exit 1
+# Health check dengan delay yang cukup
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
 
-# Start dengan debugging
-CMD ["sh", "-c", "echo 'Starting FrankenPHP...' && frankenphp run --config /dev/stdin << 'EOF'\n:8080 {\n    root * /app/public\n    php_server\n}\nEOF"]
+# Start dengan correct adapter
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
