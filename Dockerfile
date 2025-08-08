@@ -50,21 +50,14 @@ RUN php artisan config:cache || true
 RUN php artisan route:cache || true  
 RUN php artisan view:cache || true
 
-# Create Caddyfile untuk FrankenPHP (BUKAN PHP-FPM!)
-RUN echo ':8080 {' > /etc/caddy/Caddyfile && \
-    echo '    root * /app/public' >> /etc/caddy/Caddyfile && \
-    echo '    encode gzip' >> /etc/caddy/Caddyfile && \
-    echo '    php_server' >> /etc/caddy/Caddyfile && \
-    echo '}' >> /etc/caddy/Caddyfile
-
 EXPOSE 8080
 
-# Environment variables untuk FrankenPHP
+# Environment variables - biarkan FrankenPHP auto-detect Laravel
 ENV SERVER_NAME=":8080"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
-# Start dengan Caddyfile yang benar
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+# JANGAN gunakan custom Caddyfile - biarkan FrankenPHP auto-detect Laravel
+CMD ["frankenphp", "run"]
