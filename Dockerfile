@@ -41,9 +41,11 @@ COPY . .
 # Sekarang jalankan composer install dengan scripts (artisan sudah ada)
 RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Set proper permissions untuk Laravel
-RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache \
-    && chmod -R 775 /app/storage /app/bootstrap/cache
+# Set proper permissions untuk Laravel dengan user yang ada
+RUN chmod -R 775 /app/storage /app/bootstrap/cache \
+    && chown -R www-data:www-data /app/storage /app/bootstrap/cache 2>/dev/null || \
+    chown -R nobody:nobody /app/storage /app/bootstrap/cache 2>/dev/null || \
+    chmod -R 777 /app/storage /app/bootstrap/cache
 
 # Laravel optimizations dengan error handling
 RUN php artisan key:generate --force || true
