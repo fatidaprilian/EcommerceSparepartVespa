@@ -1,15 +1,12 @@
 # --- Tahap 1: Backend Dependencies ---
-# Menggunakan image composer resmi untuk menginstall dependensi PHP.
-# Ini memanfaatkan cache Docker secara efisien.
 FROM composer:2.7 as vendor
 WORKDIR /app
 COPY database/ database/
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist
+# Install dengan ignore platform requirements untuk tahap ini
+RUN composer install --no-interaction --no-dev --no-scripts --prefer-dist --ignore-platform-reqs
 
 # --- Tahap 2: Frontend Dependencies ---
-# Menggunakan image Node.js untuk membangun aset frontend.
-# Tahap ini akan dibuang dan tidak akan ada di image final.
 FROM node:20-alpine as frontend
 WORKDIR /app
 COPY package*.json ./
@@ -18,42 +15,49 @@ COPY . .
 RUN npm run build
 
 # --- Tahap 3: Production Image ---
-# Memulai dari image FrankenPHP yang ramping.
 FROM dunglas/frankenphp:php8.3-alpine as production
 
 # Install dependensi yang diperlukan untuk Laravel
 RUN apk add --no-cache \
-    php83-pdo \
-    php83-pdo_mysql \
-    php83-mbstring \
-    php83-xml \
-    php83-curl \
-    php83-zip \
-    php83-bcmath \
-    php83-gd \
-    php83-tokenizer \
-    php83-fileinfo \
-    php83-opcache
+    icu-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    oniguruma-dev \
+    curl-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install \
+    pdo \
+    pdo_mysql \
+    mbstring \
+    xml \
+    curl \
+    zip \
+    bcmath \
+    gd \
+    tokenizer \
+    fileinfo \
+    opcache \
+    intl
 
 WORKDIR /app
 
-# [PENTING] User default di image ini adalah 'frankenphp'.
-# Kita akan menyalin file dengan user ini untuk izin yang benar.
+# Salin aplikasi dengan ownership yang benar
 COPY --chown=frankenphp:frankenphp . .
 
 # Salin artifak dari tahap-tahap sebelumnya
 COPY --from=vendor --chown=frankenphp:frankenphp /app/vendor/ ./vendor/
 COPY --from=frontend --chown=frankenphp:frankenphp /app/public/build ./public/build
 
-# Berikan izin yang benar dan aman untuk Laravel
+# Berikan izin yang benar untuk Laravel
 RUN chown -R frankenphp:frankenphp /app/storage /app/bootstrap/cache
 RUN chmod -R 775 /app/storage /app/bootstrap/cache
 
-# Install composer untuk menjalankan optimasi
+# Install composer untuk optimasi
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
-# Jalankan optimasi Laravel untuk production
-# Ini membuat aplikasi Anda lebih cepat.
+# Install dependencies lagi dengan platform requirements
 RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
 
 # Generate application key jika belum ada
@@ -65,8 +69,8 @@ RUN php artisan config:cache && \
     php artisan view:cache && \
     php artisan event:cache
 
-# Railway specific: Expose port yang digunakan Railway
+# Expose port untuk Easypanel
 EXPOSE 8080
 
-# Jalankan FrankenPHP dengan port Railway
+# Jalankan FrankenPHP
 CMD ["frankenphp", "run", "--listen", ":8080"]
