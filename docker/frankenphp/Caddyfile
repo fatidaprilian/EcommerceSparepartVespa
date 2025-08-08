@@ -1,0 +1,15 @@
+{
+    # Blok global, bisa dikosongkan.
+}
+
+# Dengar di port 80 untuk SEMUA domain yang masuk
+:80 {
+    # Atur root direktori ke folder public Laravel
+    root * /app/public
+    # Aktifkan kompresi
+    encode zstd gzip
+    # Arahkan semua request file PHP ke FrankenPHP
+    php_server
+    # Tangani request file statis (CSS, JS, gambar)
+    file_server
+}

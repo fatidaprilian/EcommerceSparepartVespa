@@ -21,27 +21,25 @@ RUN apk add --no-cache \
 # Salin binary Composer dari tahap pertama
 COPY --from=composer /usr/bin/composer /usr/bin/composer
 
+# --- PERUBAHAN DI SINI ---
+# Salin Caddyfile yang sudah benar ke dalam image.
+# Caddy akan otomatis memuatnya saat dijalankan.
+COPY Caddyfile /etc/caddy/Caddyfile
+
 # Salin file definisi dependensi
 COPY composer.json composer.lock ./
 
-# Install dependensi PHP untuk production (tanpa dev, optimasi autoloader)
+# Install dependensi PHP untuk production
 RUN composer install --no-dev --no-interaction --optimize-autoloader --no-scripts
 
 # Salin sisa kode aplikasi ke dalam image
 COPY . .
 
-# Jalankan kembali composer install untuk menjalankan skrip pasca-instalasi (seperti package:discover)
+# Jalankan kembali composer install untuk menjalankan skrip
 RUN composer install --no-dev --no-interaction --optimize-autoloader
 
-# Berikan izin tulis universal ke direktori storage dan cache yang dibutuhkan Laravel
+# Berikan izin tulis ke direktori yang dibutuhkan Laravel
 RUN chmod -R 777 /app/storage /app/bootstrap/cache
-
-
-RUN rm -f /etc/frankenphp/Caddyfile
 
 # Expose port untuk HTTP, HTTPS, dan HTTP/3
 EXPOSE 80 443 443/udp
-
-# Tidak ada CMD atau ENTRYPOINT.
-# Biarkan entrypoint default dari image dunglas/frankenphp mengambil alih.
-# Ia akan secara otomatis mendeteksi Laravel dan menjalankannya dengan benar.
