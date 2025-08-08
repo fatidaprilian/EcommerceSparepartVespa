@@ -2,7 +2,7 @@ FROM dunglas/frankenphp:php8.3-alpine
 
 WORKDIR /app
 
-# Install dependencies + curl untuk health check
+# Install system dependencies
 RUN apk add --no-cache \
     icu-dev \
     libxml2-dev \
@@ -15,8 +15,10 @@ RUN apk add --no-cache \
     curl \
     autoconf \
     g++ \
-    make \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    make
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install \
     pdo \
     pdo_mysql \
@@ -32,47 +34,72 @@ RUN apk add --no-cache \
 # Install Composer
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
-# Copy composer files dan install dependencies
+# Copy and install dependencies
 COPY composer.json composer.lock ./
 RUN composer install --no-interaction --no-dev --no-scripts --ignore-platform-reqs
 
-# Copy aplikasi
+# Copy application
 COPY . .
 RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Permissions
+# Set permissions
 RUN chmod -R 777 /app/storage /app/bootstrap/cache
 
-# Laravel optimizations
-RUN php artisan key:generate --force || true
-RUN php artisan config:cache || true
-RUN php artisan route:cache || true  
-RUN php artisan view:cache || true
-RUN php artisan --version
+# Create simple health check that doesn't depend on database
+RUN echo '<?php http_response_code(200); echo "OK"; ?>' > /app/public/health.php
 
-# Create simple health check endpoint
-RUN echo '<?php echo "OK"; ?>' > /app/public/health.php
+# Laravel setup with error handling (skip if database not ready)
+RUN php artisan key:generate --force || echo "Key generation skipped"
+RUN php artisan config:cache || echo "Config cache skipped"
+RUN php artisan route:cache || echo "Route cache skipped"
+RUN php artisan view:cache || echo "View cache skipped"
 
-# Create Caddyfile dengan health check route
+# Create startup script to handle database migrations
+RUN cat > /app/startup.sh << 'EOF'
+#!/bin/sh
+
+echo "Starting Laravel application..."
+
+# Wait for database to be ready (optional)
+echo "Checking database connection..."
+php artisan migrate --force || echo "Migration failed, continuing anyway..."
+
+# Clear and cache config
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+echo "Starting FrankenPHP..."
+exec frankenphp run --config /etc/caddy/Caddyfile
+EOF
+
+RUN chmod +x /app/startup.sh
+
+# Create Caddyfile with better error handling
 RUN cat > /etc/caddy/Caddyfile << 'EOF'
 :8080 {
-root * /app/public
-encode gzip
-php_server
-
-# Health check endpoint
-handle /health {
-respond "OK" 200
-}
+	root * /app/public
+	php_server
+	
+	# Health check endpoint
+	handle /health {
+		respond "OK" 200
+	}
+	
+	# Handle Laravel index
+	handle {
+		try_files {path} {path}/ /index.php?{query}
+	}
+	
+	# Logging
+	log {
+		output stdout
+		format console
+	}
 }
 EOF
 
 EXPOSE 8080
 
-ENV SERVER_NAME=":8080"
-
-# Health check yang lebih sederhana
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
-
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+# Use startup script instead of direct frankenphp
+CMD ["/app/startup.sh"]
