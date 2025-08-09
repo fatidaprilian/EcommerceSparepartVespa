@@ -62,6 +62,7 @@ services:
     ports:
       - '${FORWARD_MEILISEARCH_PORT:-7700}:7700'
     environment:
+      MEILI_MASTER_KEY: 'YltzG17BBkbbs7sNBJ5PlVOb6e_EuHasK5yljHFk9jI'
       MEILI_NO_ANALYTICS: '${MEILISEARCH_NO_ANALYTICS:-false}'
     volumes:
       - 'sail-meilisearch:/meili_data'
